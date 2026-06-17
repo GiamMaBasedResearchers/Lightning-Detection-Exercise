@@ -15,6 +15,10 @@ https://www.w3schools.com/html/tryit.asp?filename=tryhtml_default
 
 1. Lightning Comparator Tool (file Image_Comparator_Tool.HTML)
 
+
+<img width="1917" height="925" alt="image" src="https://github.com/user-attachments/assets/43e78158-246f-4afd-8b23-9c45608ef7ef" />
+
+
 A client-side web tool designed to compare and correlate global lightning activity data between WWLLN (World Wide Lightning Location Network) and Blitzortung (via Limaps).
 
 This tool runs entirely in the browser using HTML5 Canvas for image manipulation and Leaflet.js for visual overlay comparison.
@@ -46,7 +50,11 @@ Blitzortung/Limaps: limaps.org
 
 
 
-2. Universal Map Alignment Tool
+2. Universal Map Alignment Tool (file Map Projection - Alignment Panel_2.html)
+
+
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/42a7b489-7a8d-4342-8f92-7557fbb51a43" />
+
    
 A client-side web utility designed for precise map projection alignment and image processing. Specifically engineered to overlay WWLLN lightning data onto Blitzortung background maps by correcting complex geometric distortions using non-linear transformations.
 
@@ -77,7 +85,11 @@ The tool runs entirely in the browser using HTML5 Canvas. The alignment logic by
 ytransformed​=sign(y)⋅∣y∣einterpolated​ Where einterpolated​ is calculated based on the pixel's distance from the equator, blending the user-defined North, Equatorial, and South exponents. This allows for high-precision warping of the lightning data to fit curved projection lines.
 
 
-3.Lightning Georeferencing Tool
+3.Lightning Georeferencing Tool (file GeoCode_Raster_Lightning_v3.1.html)
+
+
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/3e113b35-1ba0-42c6-b677-71f9f89b66d5" />
+
 
 A client-side web utility designed to transform 2D raster lightning maps (Limaps/Blitzortung and WWLLN) into interactive, georeferenced vector layers. This tool performs pixel-level scanning to extract lightning strikes and projects them onto a Leaflet.js map with precise lat/lon coordinates.
 
@@ -127,7 +139,14 @@ WWLLN: wwlln.net
 Limaps: limaps.org
 
 
-4. Satellite Lightning Processor (GeoFixed)
+4. Satellite Lightning Processor (GeoFixed) (file Geostationary_lightning_flsh_detected_V2.html)
+
+
+<img width="1105" height="797" alt="image" src="https://github.com/user-attachments/assets/24fdaef0-483b-4597-ae27-1e4010c7df81" />
+
+
+<img width="1464" height="633" alt="image" src="https://github.com/user-attachments/assets/b5c0e971-3004-4ae7-bf0f-a8988a0a3951" />
+
 
 A client-side web utility designed to extract, rasterize, and georeference lightning flashes from geostationary satellite video feeds. This tool transforms transient video events (flashes) into a persistent, interactive map layer using Leaflet.js.
 
