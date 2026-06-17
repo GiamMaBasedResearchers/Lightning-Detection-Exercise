@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lightning Comparator Tool</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body { margin: 0; padding: 0; background: #050505; font-family: 'Segoe UI', sans-serif; color: #ddd; overflow: hidden; }
+        #map { width: 100vw; height: 100vh; outline: none; z-index: 1; }
+        
+        .panel {
+            position: fixed; z-index: 1000;
+            background: rgba(15, 15, 20, 0.95);
+            border: 1px solid #444; border-radius: 6px;
+            padding: 15px; width: 340px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.7);
+            backdrop-filter: blur(5px);
+            max-height: 95vh;
+            overflow-y: auto;
+        }
+        
+        #controls { top: 20px; left: 20px; }
+        
+        h2 { margin: 0 0 10px 0; font-size: 14px; color: #4fc3f7; text-transform: uppercase; border-bottom: 1px solid #333; padding-bottom: 8px; letter-spacing: 1px;}
+        .section { margin-bottom: 15px; border-bottom: 1px solid #222; padding-bottom: 15px; }
+        .section:last-child { border: none; margin-bottom: 0; }
+        
+        label { display: block; font-size: 11px; color: #aaa; margin-bottom: 4px; margin-top: 8px; }
+        
+        button {
+            width: 100%; background: #1976d2; color: white; border: none;
+            padding: 8px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600;
+            transition: background 0.2s; margin-top: 6px;
+        }
+        button:hover { background: #1565c0; }
+        button.secondary { background: #333; }
+        button.secondary:hover { background: #444; }
+        button.process-btn { background: #ff9800; }
+        button.process-btn:hover { background: #e68a00; }
+        button:disabled { background: #444; color: #888; cursor: not-allowed; }
+        
+        select { background: #222; border: 1px solid #444; color: #fff; padding: 6px; width: 100%; border-radius: 4px; font-family: inherit; font-size: 12px; box-sizing: border-box; }
+
+        .toggle-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; font-size: 12px; color: #ddd; }
+        .control-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+        .control-row input[type="range"] { flex-grow: 1; cursor: pointer; accent-color: #4fc3f7; }
+        .control-row input[type="number"] { width: 60px; text-align: center; }
+
+        .status-msg { font-size: 10px; margin-top: 5px; color: #aaa; font-family: monospace; white-space: pre-wrap; background: #111; padding: 5px; border-radius: 3px; border: 1px solid #333; max-height: 80px; overflow-y: auto;}
+        .error { color: #ff5252; }
+        .success { color: #69f0ae; }
+        
+        .progress-bar { height: 4px; background: #333; margin-top: 5px; width: 100%; display: none; border-radius: 2px;}
+        .progress-fill { height: 100%; background: #4fc3f7; width: 0%; transition: width 0.2s; }
+
+        .note { font-size: 10px; color: #666; margin-top: 2px; font-style: italic; }
+    </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="controls" class="panel">
+    <h2>Comparator Tool</h2>
+
+    <!-- GENERATOR -->
+    <div class="section">
+        <label>1. Download Maps</label>
+        <select id="mode-select" onchange="updateFetchUI()">
+            <option value="realtime">Realtime (Today)</option>
+            <option value="yesterday">Yesterday (24h Composite)</option>
+        </select>
+        <button onclick="startGeneration()">⚡ Load Images</button>
+        <div class="progress-bar" id="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+        <div id="gen-status" class="status-msg">Ready.</div>
+    </div>
+
+    <!-- LOCAL ALGORITHM -->
+    <div class="section">
+        <label>2. Local Projection Processing</label>
+        <div class="note" style="color:#aaa; margin-bottom:5px;">
+            Resizes WWLLN to Blitz dimensions and removes black background.<br>
+            <b>Note:</b> Auto-download creates "Tainted" images. Pixel manipulation requires File Upload.
+        </div>
+        
+        <!-- Fallback Uploads -->
+        <label for="file-wwlln" style="color:#fff; cursor:pointer; text-decoration:underline;">If Auto-Fail: Upload WWLLN</label>
+        <input type="file" id="file-wwlln" accept="image/*" onchange="loadManualWWLLN(this)" style="display:none">
+        
+        <label for="file-blitz" style="color:#fff; cursor:pointer; text-decoration:underline;">If Auto-Fail: Upload Blitz</label>
+        <input type="file" id="file-blitz" accept="image/*" onchange="loadManualBlitz(this)" style="display:none">
+        
+        <button id="btn-process" class="process-btn" onclick="processWWLLN()" disabled>Process & Remove Background</button>
+        
+        <div id="process-status" class="status-msg" style="margin-top:5px;"></div>
+    </div>
+
+    <!-- ALIGNMENT -->
+    <div class="section">
+        <label>3. Alignment</label>
+        <div class="toggle-row">
+            <span>Show Blitz (Ref)</span>
+            <input type="checkbox" id="check-blitz" checked onchange="toggleLayer('blitz')">
+        </div>
+        <div class="toggle-row">
+            <span>Show WWLLN</span>
+            <input type="checkbox" id="check-wwlln" checked onchange="toggleLayer('wwlln')">
+        </div>
+        <hr style="border-color:#333; margin: 8px 0;">
+        <label>Opacity WWLLN</label>
+        <div class="control-row">
+            <input type="range" min="0" max="100" value="80" oninput="updateAlignment('opacity', this.value)">
+            <input type="number" min="0" max="100" value="80" oninput="updateAlignment('opacity', this.value)">
+        </div>
+        <button class="secondary" onclick="resetAlignment()">Reset</button>
+    </div>
+</div>
+
+<script>
+    // --- CONFIGURATION ---
+    const WWLLN_REALTIME_URL = 'https://wwlln.net/global_stroke_map.png';
+    const BLITZ_REALTIME_URL = 'https://www.limaps.org/Current/image_b_earth.png';
+    const BASE_WIDTH = 3600; 
+    const BASE_HEIGHT = 1800; 
+
+    // --- STATE ---
+    let map, layerWWLLN, layerComposite;
+    let alignState = { opacity: 80 };
+    
+    // Images in memory for the algorithm
+    let imgWWLLN = null;
+    let imgBlitz = null;
+
+    window.onload = function() {
+        initMap();
+    };
+
+    function initMap() {
+        map = L.map('map', {
+            crs: L.CRS.Simple,
+            minZoom: -2,
+            maxZoom: 2,
+            zoomControl: false,
+            attributionControl: false
+        });
+        const bounds = [[0, 0], [BASE_HEIGHT, BASE_WIDTH]];
+        map.fitBounds(bounds);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+    }
+
+    // --- AUTOMATIC DOWNLOAD (DIRECT, NO CORS) ---
+    function loadImage(url) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            // NO CROSSORIGIN = Direct Download as requested
+            // This allows display but taints the canvas
+            img.onload = () => resolve(img);
+            img.onerror = () => resolve(null); 
+            img.src = url;
+        });
+    }
+
+    async function startGeneration() {
+        const mode = document.getElementById('mode-select').value;
+        const statusEl = document.getElementById('gen-status');
+        const progressEl = document.getElementById('progress-bar');
+        const fillEl = document.getElementById('progress-fill');
+        
+        statusEl.innerText = "Starting (Direct)...";
+        progressEl.style.display = 'block';
+        fillEl.style.width = '0%';
+
+        // Load WWLLN
+        statusEl.innerText = "Downloading WWLLN...";
+        imgWWLLN = await loadImage(WWLLN_REALTIME_URL);
+        
+        if (imgWWLLN) {
+            if (layerWWLLN) map.removeLayer(layerWWLLN);
+            layerWWLLN = L.imageOverlay(WWLLN_REALTIME_URL, [[0, 0], [BASE_HEIGHT, BASE_WIDTH]], { opacity: 1 });
+            if(document.getElementById('check-wwlln').checked) layerWWLLN.addTo(map);
+        } else {
+            statusEl.innerText = "Error loading WWLLN.";
+            progressEl.style.display = 'none';
+            return;
+        }
+
+        // Load Blitz
+        if (mode === 'realtime') {
+            fillEl.style.width = '50%';
+            statusEl.innerText = "Downloading Blitz...";
+            if (layerComposite) map.removeLayer(layerComposite);
+            
+            imgBlitz = await loadImage(BLITZ_REALTIME_URL);
+            
+            if(imgBlitz) {
+                const bounds = [[0, 0], [imgBlitz.height, imgBlitz.width]];
+                layerComposite = L.imageOverlay(BLITZ_REALTIME_URL, bounds, { 
+                    opacity: alignState.opacity / 100 
+                }).addTo(map);
+                checkProcessReady();
+            } else {
+                statusEl.innerText = "Error loading Blitz.";
+                return;
+            }
+            
+            fillEl.style.width = '100%';
+            statusEl.innerText = "Loaded.";
+            statusEl.className = "status-msg success";
+        } else {
+            // Yesterday Loop
+            await handleYesterday(statusEl, fillEl);
+        }
+        
+        progressEl.style.display = 'none';
+        ensureLayerOrder();
+    }
+
+    async function handleYesterday(statusEl, fillEl) {
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        const y = d.getFullYear();
+        const m = (d.getMonth() + 1).toString().padStart(2, '0');
+        const day = d.getDate().toString().padStart(2, '0');
+        
+        const baseUrl = `https://www.limaps.org/Maps/Maps/${y}/${m}/${day}/`;
+        statusEl.innerText = `Target: ${y}-${m}-${day}`;
+
+        const compositeCanvas = document.createElement('canvas');
+        const ctxComp = compositeCanvas.getContext('2d');
+        ctxComp.globalCompositeOperation = 'screen'; 
+        let firstImageLoaded = false;
+        let successCount = 0;
+
+        let urlsToFetch = [];
+        for (let h = 0; h < 24; h++) {
+            const hour = h.toString().padStart(2, '0');
+            for (let min = 0; min < 60; min += 5) {
+                const rawUrl = `${baseUrl}${hour}/${min.toString().padStart(2,'0')}/image_b_earth.png`;
+                urlsToFetch.push(rawUrl);
+            }
+        }
+
+        const batchSize = 8;
+        for (let i = 0; i < urlsToFetch.length; i += batchSize) {
+            const batch = urlsToFetch.slice(i, i + batchSize);
+            const promises = batch.map(url => {
+                return loadImage(url).then(img => {
+                    if (img) {
+                        if (!firstImageLoaded) {
+                            compositeCanvas.width = img.width;
+                            compositeCanvas.height = img.height;
+                            firstImageLoaded = true;
+                        }
+                        ctxComp.drawImage(img, 0, 0, compositeCanvas.width, compositeCanvas.height);
+                        successCount++;
+                    }
+                });
+            });
+            await Promise.all(promises);
+            fillEl.style.width = ((i + batchSize) / urlsToFetch.length * 100) + '%';
+        }
+
+        if (successCount > 0) {
+            try {
+                // Attempt composite (might fail due to Tainted Canvas)
+                const dataUrl = compositeCanvas.toDataURL();
+                imgBlitz = await loadImage(dataUrl);
+                const bounds = [[0,0], [compositeCanvas.height, compositeCanvas.width]];
+                if (layerComposite) map.removeLayer(layerComposite);
+                layerComposite = L.imageOverlay(dataUrl, bounds, { opacity: alignState.opacity/100 }).addTo(map);
+                checkProcessReady();
+                statusEl.innerText = `Done! ${successCount} frames.`;
+                statusEl.className = "status-msg success";
+            } catch (e) {
+                statusEl.innerText = "Yesterday composite failed (Security).";
+                statusEl.className = "status-msg error";
+            }
+        } else {
+            statusEl.innerText = "No history.";
+            statusEl.className = "status-msg error";
+        }
+    }
+
+    // --- LOCAL ALGORITHM LOGIC ---
+    function checkProcessReady() {
+        const btn = document.getElementById('btn-process');
+        if (imgWWLLN && imgBlitz) {
+            btn.disabled = false;
+            btn.innerText = "Process & Remove Background";
+        } else {
+            btn.disabled = true;
+            btn.innerText = "Load maps first";
+        }
+    }
+
+    function loadManualWWLLN(input) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    imgWWLLN = img; // Replace auto-loaded with local
+                    if (layerWWLLN) map.removeLayer(layerWWLLN);
+                    layerWWLLN = L.imageOverlay(e.target.result, [[0, 0], [img.height, img.width]], { opacity: 1 });
+                    if(document.getElementById('check-wwlln').checked) layerWWLLN.addTo(map);
+                    checkProcessReady();
+                    document.getElementById('process-status').innerText = "WWLLN local loaded.";
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    function loadManualBlitz(input) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    imgBlitz = img;
+                    if (layerComposite) map.removeLayer(layerComposite);
+                    layerComposite = L.imageOverlay(e.target.result, [[0, 0], [img.height, img.width]], { opacity: 1 });
+                    if(document.getElementById('check-blitz').checked) layerComposite.addTo(map);
+                    checkProcessReady();
+                    document.getElementById('process-status').innerText = "Blitz local loaded.";
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    function processWWLLN() {
+        if (!imgWWLLN || !imgBlitz) return;
+        
+        const statusEl = document.getElementById('process-status');
+        statusEl.innerText = "Processing pixels...";
+        statusEl.className = "status-msg";
+        
+        setTimeout(() => {
+            try {
+                // 1. Set canvas dimensions to Blitz (Reference)
+                const targetW = imgBlitz.width;
+                const targetH = imgBlitz.height;
+                const canvas = document.createElement('canvas');
+                canvas.width = targetW;
+                canvas.height = targetH;
+                
+                const ctx = canvas.getContext('2d');
+                
+                // 2. Draw WWLLN scaled to fill Blitz
+                ctx.drawImage(imgWWLLN, 0, 0, targetW, targetH);
+                
+                // 3. Remove Black Background (Chroma Key)
+                const imgData = ctx.getImageData(0, 0, targetW, targetH);
+                const data = imgData.data;
+                
+                for (let i = 0; i < data.length; i += 4) {
+                    let r = data[i], g = data[i+1], b = data[i+2];
+                    // Threshold for black
+                    if (r < 25 && g < 25 && b < 25) {
+                        data[i + 3] = 0; 
+                    }
+                }
+                
+                ctx.putImageData(imgData, 0, 0);
+                
+                // 4. Update Layer
+                const dataUrl = canvas.toDataURL();
+                if (layerWWLLN) map.removeLayer(layerWWLLN);
+                layerWWLLN = L.imageOverlay(dataUrl, [[0, 0], [targetH, targetW]], { opacity: 1 }).addTo(map);
+                
+                statusEl.innerText = "WWLLN Processed!";
+                statusEl.className = "status-msg success";
+                
+                // Show result
+                document.getElementById('check-blitz').checked = false;
+                document.getElementById('check-wwlln').checked = true;
+                toggleLayer('blitz');
+                toggleLayer('wwlln');
+                ensureLayerOrder();
+                
+            } catch (e) {
+                console.error(e);
+                statusEl.innerText = "SECURITY ERROR: Cannot modify pixels of remote images.\nPlease use the 'Upload' buttons above.";
+                statusEl.className = "status-msg error";
+            }
+        }, 40);
+    }
+
+    // --- LAYER MANAGEMENT ---
+    function toggleLayer(type) {
+        if (type === 'blitz' && layerComposite) {
+            document.getElementById('check-blitz').checked ? layerComposite.addTo(map) : map.removeLayer(layerComposite);
+        }
+        if (type === 'wwlln' && layerWWLLN) {
+            document.getElementById('check-wwlln').checked ? layerWWLLN.addTo(map) : map.removeLayer(layerWWLLN);
+        }
+        ensureLayerOrder();
+    }
+
+    function ensureLayerOrder() {
+        if (layerWWLLN && map.hasLayer(layerWWLLN)) layerWWLLN.bringToFront();
+        if (layerComposite && map.hasLayer(layerComposite)) layerComposite.bringToFront();
+    }
+
+    function updateAlignment(type, value) {
+        value = parseInt(value);
+        alignState[type] = value;
+        if (type === 'opacity' && layerWWLLN) layerWWLLN.setOpacity(value / 100);
+    }
+    
+    function resetAlignment() {
+        alignState = { opacity: 80 };
+        document.querySelector('.control-row input[type="range"]').value = 80;
+        if(layerWWLLN) layerWWLLN.setOpacity(0.8);
+    }
+
+    function updateFetchUI() {}
+</script>
+</body>
+</html>
