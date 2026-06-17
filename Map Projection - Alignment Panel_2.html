@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Universal Map Alignment Tool</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; background: #1a1a1a; color: #eee; }
+        .box { max-width: 950px; margin: 0 auto; background: #2a2a2a; padding: 20px; border-radius: 8px; }
+        .file-input { margin-bottom: 15px; padding: 8px; background: #333; color: #fff; width: 100%; box-sizing: border-box; border: 1px solid #555; }
+        .slide-box { background: #333; padding: 10px; margin-bottom: 15px; border-radius: 4px; display: flex; flex-direction: column; gap: 5px; }
+        .slide-box label { font-weight: bold; color: #ff9800; font-size: 13px; }
+        .slide-box input { accent-color: #ff9800; width: 100%; }
+        button { background: #ff9800; color: #111; border: none; padding: 12px; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold; width: 100%; }
+        #status { margin-bottom: 15px; padding: 10px; border-radius: 4px; background: #222; font-weight: bold; text-align: center; color: #ffeb3b; }
+        .map-container { position: relative; margin-top: 15px; width: 100%; display: none; border: 2px solid #555; }
+        #bgPreview { display: block; width: 100%; height: auto; }
+        #overlayCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; mix-blend-mode: screen; pointer-events: none; }
+        .dl-btn { display: none; margin-top: 15px; text-align: center; background: #4caf50; color: white; padding: 12px; text-decoration: none; border-radius: 4px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="box">
+    <h2>Advanced Map Projection & Alignment Panel</h2>
+    
+    <label>1. Blitzortung Background Map:</label>
+    <input type="file" id="fBlitz" class="file-input" accept="image/*" onchange="loadBackground(this)">
+
+    <label>2. WWLLN Overlay Map (Lightning Data):</label>
+    <input type="file" id="fWwlln" class="file-input" accept="image/*" onchange="loadOverlay(this)">
+
+    <div class="slide-box">
+        <label>Horizontal Offset (Global X Shift): <span id="vX">0</span> px</label>
+        <input type="range" id="xOff" min="-100" max="100" value="0" oninput="updateX(this.value)">
+    </div>
+    <div class="slide-box">
+        <label>Horizontal Scale (Global X Width): <span id="vS">100</span>%</label>
+        <input type="range" id="xScale" min="90" max="130" step="0.1" value="100" oninput="updateS(this.value)">
+    </div>
+    <div class="slide-box">
+        <label>Vertical Offset (Global Y Shift): <span id="vY">0</span> px</label>
+        <input type="range" id="yOff" min="-100" max="100" value="0" oninput="updateY(this.value)">
+    </div>
+    
+    <!-- ADVANCED TRI-AXIAL Y MERCATOR EXPONENT STRETCH CONTROLS -->
+    <div class="slide-box">
+        <label>North Polar Stretch Factor (Upper Y Exponent): <span id="vNStretch">1.34</span></label>
+        <input type="range" id="nStretch" min="0.5" max="2.0" step="0.01" value="1.34" oninput="updateNStretch(this.value)">
+    </div>
+    <div class="slide-box">
+        <label>Equatorial Stretch Factor (Center Y Exponent): <span id="vEStretch">1.00</span></label>
+        <input type="range" id="eStretch" min="0.5" max="2.0" step="0.01" value="1.00" oninput="updateEStretch(this.value)">
+    </div>
+    <div class="slide-box">
+        <label>South Polar Stretch Factor (Lower Y Exponent): <span id="vSStretch">1.34</span></label>
+        <input type="range" id="sStretch" min="0.5" max="2.0" step="0.01" value="1.34" oninput="updateSStretch(this.value)">
+    </div>
+    
+    <div class="slide-box">
+        <label>Chroma Key Alpha Threshold (Black Removal): <span id="vN">30</span></label>
+        <input type="range" id="bThresh" min="0" max="100" value="30" oninput="updateN(this.value)">
+    </div>
+
+    <button id="btnGo" onclick="startProcessing()">Process & Overlay Maps</button>
+    <div id="status">Please select input files to unlock the aligner...</div>
+    
+    <div class="map-container" id="mCont">
+        <img id="bgPreview" alt="Map Background Layer">
+        <canvas id="overlayCanvas"></canvas>
+    </div>
+    <a id="dlLink" class="dl-btn" href="#">Export Aligned Transparent Layer</a>
+</div>
+
+<script>
+    let imgW = new Image(); let isBgLoaded = false; let isOvLoaded = false; let isReady = false;
+    function loadBackground(el) { if (el.files && el.files.item(0)) { const r = new FileReader(); r.onload = function(e) { document.getElementById("bgPreview").src = e.target.result; document.getElementById("bgPreview").onload = function() { isBgLoaded = true; checkStatus(); }; }; r.readAsDataURL(el.files.item(0)); } }
+    function loadOverlay(el) { if (el.files && el.files.item(0)) { const r = new FileReader(); r.onload = function(e) { imgW.src = e.target.result; imgW.onload = function() { isOvLoaded = true; checkStatus(); }; }; r.readAsDataURL(el.files.item(0)); } }
+    function checkStatus() { if (isBgLoaded && isOvLoaded) { document.getElementById("status").textContent = "Files loaded successfully."; } }
+    function updateX(v) { document.getElementById("vX").textContent = v; if(isReady) executeMapping(); }
+    function updateS(v) { document.getElementById("vS").textContent = v; if(isReady) executeMapping(); }
+    function updateY(v) { document.getElementById("vY").textContent = v; if(isReady) executeMapping(); }
+    function updateN(v) { document.getElementById("vN").textContent = v; if(isReady) executeMapping(); }
+    function updateNStretch(v) { document.getElementById("vNStretch").textContent = v; if(isReady) executeMapping(); }
+    function updateEStretch(v) { document.getElementById("vEStretch").textContent = v; if(isReady) executeMapping(); }
+    function updateSStretch(v) { document.getElementById("vSStretch").textContent = v; if(isReady) executeMapping(); }
+    function startProcessing() { if (!isBgLoaded || !isOvLoaded) return; isReady = true; executeMapping(); document.getElementById("mCont").style.display = "block"; document.getElementById("dlLink").style.display = "block"; document.getElementById("status").textContent = "Adjust parameters in real time to lock coordinates."; }
+    function executeMapping() { const preview = document.getElementById("bgPreview"); const canvas = document.getElementById("overlayCanvas"); const w = preview.naturalWidth; const h = preview.naturalHeight; canvas.width = w; canvas.height = h; const ctx = canvas.getContext("2d"); const srcCanvas = document.createElement("canvas"); srcCanvas.width = imgW.width; srcCanvas.height = imgW.height; const srcCtx = srcCanvas.getContext("2d"); srcCtx.drawImage(imgW, 0, 0); const srcData = srcCtx.getImageData(0, 0, imgW.width, imgW.height); const outData = ctx.createImageData(w, h); const oX = parseInt(document.getElementById("xOff").value); const sX = parseFloat(document.getElementById("xScale").value) / 100; const oY = parseInt(document.getElementById("yOff").value); const fN = parseFloat(document.getElementById("nStretch").value); const fE = parseFloat(document.getElementById("eStretch").value); const fS = parseFloat(document.getElementById("sStretch").value); const th = parseInt(document.getElementById("bThresh").value); const xMinB = w * 0.041; const xMaxB = w * 0.959; const yMin = h * 0.088; const yMax = h * 0.888; const cX = (xMinB + xMaxB) / 2; const sW = ((xMaxB - xMinB) / 2) * sX; const xMin = cX - sW; const xMax = cX + sW; const gW = xMax - xMin; const gH = yMax - yMin; const maxLat = 78.5 * Math.PI / 180; const minY = Math.log(Math.tan(Math.PI / 4 + (-maxLat) / 2)); const maxY = Math.log(Math.tan(Math.PI / 4 + (maxLat) / 2)); const diffY = maxY - minY; for (let y = 0; y < h; y++) { let yC = y - oY; if (yC < yMin || yC > yMax) continue; let cY = (yMin + yMax) / 2; let dY = (yC - cY) / (gH / 2); let sY = dY < 0 ? -1 : 1; let currentExponent = fE; if (dY < 0) { let weight = Math.abs(dY); currentExponent = (fE * (1 - weight)) + (fN * weight); } else { let weight = Math.abs(dY); currentExponent = (fE * (1 - weight)) + (fS * weight); } let cDY = sY * Math.pow(Math.abs(dY), currentExponent); let yFrac = (cDY + 1) / 2; let mY = maxY - (yFrac * diffY); let latR = 2 * Math.atan(Math.exp(mY)) - Math.PI / 2; let ySrc = Math.floor(((90 - (latR * 180 / Math.PI)) / 180) * imgW.height); for (let x = 0; x < w; x++) { let xC = x - oX; if (xC < xMin || xC > xMax) continue; let xFrac = (xC - xMin) / gW; let xSrc = Math.floor(xFrac * imgW.width); if (xSrc >= imgW.width) xSrc = imgW.width - 1; if (ySrc >= imgW.height) ySrc = imgW.height - 1; if (xSrc < 0) xSrc = 0; if (ySrc < 0) ySrc = 0; let sIdx = (ySrc * imgW.width + xSrc) * 4; let oIdx = (y * w + x) * 4; let pR = srcData.data[sIdx]; let pG = srcData.data[sIdx + 1]; let pB = srcData.data[sIdx + 2]; let pA = srcData.data[sIdx + 3]; if (pR < th && pG < th && pB < th) { outData.data[oIdx + 3] = 0; } else { outData.data[oIdx] = pR; outData.data[oIdx + 1] = pG; outData.data[oIdx + 2] = pB; outData.data[oIdx + 3] = pA; } } } ctx.putImageData(outData, 0, 0); document.getElementById("dlLink").href = canvas.toDataURL("image/png"); document.getElementById("dlLink").download = "overlay.png"; }
+</script>
+
+</body>
+</html>
+
