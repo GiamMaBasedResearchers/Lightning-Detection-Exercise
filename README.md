@@ -1,5 +1,7 @@
 Lightning Detection Exercise - pure training and code far from usability ;)
 
+We have produced many versions of the various codes with various technical attempts. I hope I have included the most stable versions and with fewer bugs, issues of the various categories, in case we will save them locally.
+
 Obviously, there will be several fixes to be made, and the code isn't clean, and you will find entities that appear to be false positives but are not always false positives. I consider the exercise very interesting for various levels of understanding, knowledge and technicalities.
 
 As always, you can use the plain HTML locally 👋👋👋
@@ -217,5 +219,9 @@ Disclaimer: The code is for educational, training, analysis, & security purposes
 Credits
 
 This code provide from: "GiamMa-based researchers SDR R&D IoT" | @GiammaIoT2 License
+
+
+<img width="1024" height="1024" alt="image" src="https://github.com/user-attachments/assets/68c6ace6-f303-4c31-970f-630ba6ece46f" />
+
 
 This project is provided for research and educational purposes.
