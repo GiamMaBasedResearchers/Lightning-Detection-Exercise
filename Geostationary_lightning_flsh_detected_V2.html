@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Satellite Lightning Processor - GeoFixed</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        /* --- GENERAL STYLES --- */
+        body { margin: 0; padding: 0; background: #111; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #ddd; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* --- LAYOUT --- */
+        #map { flex-grow: 1; height: 100%; z-index: 1; background: #000; }
+        
+        .sidebar {
+            width: 420px; 
+            background: #1a1a1a; 
+            border-right: 1px solid #333;
+            display: flex; 
+            flex-direction: column; 
+            padding: 15px; 
+            overflow-y: auto;
+            z-index: 1000; 
+            box-shadow: 2px 0 15px rgba(0,0,0,0.6);
+        }
+
+        /* --- UI ELEMENTS --- */
+        h2 { font-size: 18px; color: #4fc3f7; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #333; padding-bottom: 10px; margin-top: 0; }
+        
+        .section { margin-bottom: 25px; border-bottom: 1px solid #222; padding-bottom: 15px; }
+        .section h3 { font-size: 14px; color: #aaa; margin: 15px 0 8px 0; font-weight: 600; }
+
+        button {
+            width: 100%; 
+            background: #1976d2; 
+            color: #fff; 
+            border: none;
+            padding: 12px; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            margin-bottom: 10px; 
+            font-size: 13px;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        button:hover { background: #1565c0; }
+        button:disabled { background: #444; color: #888; cursor: not-allowed; }
+        
+        button.secondary { background: #333; color: #ccc; }
+        button.secondary:hover { background: #444; }
+        button.stop-btn { background: #d32f2f; }
+        button.stop-btn:hover { background: #b71c1c; }
+
+        input[type="file"] { display: none; }
+        .file-label {
+            display: block; 
+            text-align: center; 
+            padding: 10px; 
+            background: #222;
+            border: 1px dashed #555; 
+            border-radius: 4px; 
+            margin-bottom: 8px; 
+            cursor: pointer; 
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        .file-label:hover { border-color: #4fc3f7; color: #4fc3f7; }
+
+        label { font-size: 12px; display: block; margin-bottom: 4px; color: #bbb; }
+
+        select {
+            width: 100%; padding: 8px; background: #222; border: 1px solid #444; color: #fff; border-radius: 4px; margin-bottom: 10px;
+        }
+
+        .control-group { margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; font-size: 12px; }
+        
+        /* Precision Slider Styling */
+        input[type="range"] { width: 100%; cursor: pointer; accent-color: #4fc3f7; }
+        .slider-labels { display: flex; justify-content: space-between; font-size: 10px; color: #666; margin-top: -5px; margin-bottom: 10px; }
+        
+        .status { 
+            font-size: 11px; 
+            font-family: 'Consolas', monospace; 
+            color: #bbb; 
+            margin-top: 8px; 
+            padding: 8px; 
+            background: #0f0f0f; 
+            border-radius: 3px; 
+            border: 1px solid #333; 
+            white-space: pre-wrap;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+        .error { color: #ff5252; border-color: #7f1d1d; }
+        .success { color: #69f0ae; border-color: #14532d; }
+        .warning { color: #ff9800; border-color: #e65100; }
+
+        /* Legend Colors */
+        .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; border: 1px solid #444; }
+        
+        .progress-container { height: 4px; background: #333; margin-top: 8px; width: 100%; display: none; border-radius: 2px; overflow: hidden;}
+        .progress-bar { height: 100%; background: #4fc3f7; width: 0%; transition: width 0.2s; }
+
+        /* Hidden Video Elements */
+        #video-source { display: none; }
+        
+        /* Canvas Preview Container */
+        .canvas-preview-container {
+            width: 100%;
+            height: 120px;
+            background: #000;
+            border: 1px solid #444;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #scan-preview { 
+            max-width: 100%; 
+            max-height: 100%; 
+            opacity: 0.7; 
+        }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <h2>Sat Lightning Processor</h2>
+
+    <!-- VIDEO PROCESSING SECTION -->
+    <div class="section">
+        <h3>1. Video Source</h3>
+        
+        <label>Select Satellite (Preset)</label>
+        <select id="sat-select" onchange="loadPreset()">
+            <option value="" disabled selected>-- Select Video --</option>
+            <!-- Updated with data-sat-lon for accurate georeferencing -->
+            <option value="https://wwlln.net/JBB/satellite/GOES18FD.mp4" data-color="blue" data-sat-lon="-137.2">GOES18 (West)</option>
+            <option value="https://wwlln.net/JBB/satellite/GOES19FD.mp4" data-color="blue" data-sat-lon="-75.0">GOES19 (East)</option>
+            <option value="https://wwlln.net/JBB/satellite/MSG0.mp4" data-color="red" data-sat-lon="0.0">MSG0 (Prime/Atlantic)</option>
+            <option value="https://wwlln.net/JBB/satellite/MSG41.webm" data-color="red" data-sat-lon="41.5">MSG41 (Indian Ocean)</option>
+            <option value="https://wwlln.net/JBB/satellite/FY4B.webm" data-color="red" data-sat-lon="104.7">FY4B (Asia-Pacific)</option>
+            <option value="https://wwlln.net/JBB/satellite/Himawari.webm" data-color="blue" data-sat-lon="140.7">Himawari (West Pacific)</option>
+        </select>
+
+        <div class="file-label" onclick="document.getElementById('fVideo').click()">OR Upload Local Video (MP4/WebM)</div>
+        <input type="file" id="fVideo" accept="video/mp4, video/webm" onchange="handleLocalVideo(this)">
+
+        <label>Detection Sensitivity</label>
+        <input type="range" id="sensitivity-slider" min="10" max="100" value="40">
+        <div class="slider-labels">
+            <span>Low (Strong strikes only)</span>
+            <span>High (All noise)</span>
+        </div>
+        <small id="sens-val" style="color: #4fc3f7; display:block; text-align:right; margin-top:-5px;">40</small>
+
+        <div class="canvas-preview-container">
+            <img id="scan-preview" alt="No video loaded">
+        </div>
+
+        <button id="btn-start-process" onclick="startVideoProcessing()" disabled>▶ Start Video Analysis</button>
+        <button id="btn-stop-process" class="stop-btn" onclick="stopVideoProcessing()" style="display:none;">⏹ Stop & Rasterize</button>
+        
+        <div class="progress-container" id="vid-progress-container">
+            <div class="progress-bar" id="vid-progress-bar"></div>
+        </div>
+        <div id="vid-status" class="status">Select a video or upload a file.</div>
+    </div>
+
+    <!-- LAYER CONTROLS -->
+    <div class="section" id="sec-results" style="display:none;">
+        <h3>2. Rasterized Results</h3>
+        <div class="control-group">
+            <label><input type="checkbox" id="chk-persist-layer" checked onchange="togglePersistLayer()"> Show Persistent Layer</label>
+        </div>
+        <div class="control-group">
+            <label>Layer Opacity</label>
+            <input type="range" min="0" max="1" step="0.1" value="0.8" oninput="updateLayerOpacity(this.value)">
+        </div>
+        <div id="stats-result" class="status success">Analysis complete.</div>
+    </div>
+
+    <!-- LEGEND / INFO -->
+    <div class="section">
+        <h3>Color Legend</h3>
+        <div class="control-group"><span class="dot" style="background:#00ffff"></span> Blue/Cyan (GOES/Himawari)</div>
+        <div class="control-group"><span class="dot" style="background:#ff3333"></span> Red (MSG/FY4B)</div>
+    </div>
+
+    <div class="section">
+        <button class="secondary" onclick="resetAll()">Reset Everything</button>
+    </div>
+</div>
+
+<div id="map"></div>
+
+<!-- Hidden Video Element -->
+<video id="video-source" playsinline muted loop></video>
+
+<!-- Hidden Canvases for Processing -->
+<canvas id="canvas-current" style="display:none;"></canvas>
+<canvas id="canvas-previous" style="display:none;"></canvas>
+<canvas id="canvas-persist" style="display:none;"></canvas>
+
+<script>
+    // --- CONFIGURATION ---
+    const satSelect = document.getElementById('sat-select');
+    
+    // --- STATE MANAGEMENT ---
+    const state = {
+        isPlaying: false,
+        targetColor: null, // 'red' or 'blue'
+        animationFrameId: null,
+        strikeCount: 0,
+        videoBounds: null, // Stores x, y, w, h of the detected Earth disk
+        hasInitializedBounds: false,
+        isReady: false,
+        satLon: 0 // Satellite sub-satellite point longitude
+    };
+
+    // --- LEAFLET INIT ---
+    const map = L.map('map').setView([20, 0], 2);
+    
+    // Dark Base Map
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO',
+        subdomains: 'abcd',
+        maxZoom: 19
+    }).addTo(map);
+
+    let persistentLayer = null;
+
+    // --- UI LISTENERS ---
+    document.getElementById('sensitivity-slider').addEventListener('input', (e) => {
+        document.getElementById('sens-val').innerText = e.target.value;
+    });
+
+    // --- VIDEO EVENT LISTENERS ---
+    const video = document.getElementById('video-source');
+
+    video.addEventListener('loadedmetadata', function() {
+        if (video.videoWidth === 0 || video.videoHeight === 0) {
+            setStatus("Error: Invalid video dimensions.", "error");
+            return;
+        }
+        
+        const currC = document.getElementById('canvas-current');
+        const prevC = document.getElementById('canvas-previous');
+        const persC = document.getElementById('canvas-persist');
+        
+        [currC, prevC, persC].forEach(c => { 
+            c.width = video.videoWidth; 
+            c.height = video.videoHeight; 
+        });
+
+        capturePreview();
+        
+        state.isReady = true;
+        document.getElementById('btn-start-process').disabled = false;
+        
+        let sourceType = state.isFileLocal ? "Local File" : "URL";
+        setStatus(`Video Loaded (${video.videoWidth}x${video.videoHeight}). Ready to Start.\nSat Lon Ref: ${state.satLon}°`, "success");
+    });
+
+    video.addEventListener('error', function(e) {
+        setStatus("Error loading video. Format may be unsupported or link broken.", "error");
+    });
+
+    // --- VIDEO LOADING FUNCTIONS ---
+
+    function loadPreset() {
+        resetAll(false); 
+        const option = satSelect.options[satSelect.selectedIndex];
+        const url = option.value;
+        const color = option.getAttribute('data-color');
+        const satLon = parseFloat(option.getAttribute('data-sat-lon'));
+        
+        state.targetColor = color;
+        state.satLon = satLon || 0;
+        state.isFileLocal = false;
+        
+        setStatus("Loading video from URL...", "warning");
+        video.src = url;
+        video.load(); 
+    }
+
+    function handleLocalVideo(input) {
+        if (input.files && input.files[0]) {
+            const url = URL.createObjectURL(input.files[0]);
+            resetAll(false);
+            
+            const name = input.files[0].name.toLowerCase();
+            let c = 'blue';
+            if (name.includes('msg') || name.includes('fy4')) c = 'red';
+            state.targetColor = c;
+            state.isFileLocal = true;
+
+            // Heuristic to guess Satellite Longitude from filename for local files
+            if (name.includes('goes18')) state.satLon = -137.2;
+            else if (name.includes('goes16') || name.includes('goes19')) state.satLon = -75.0;
+            else if (name.includes('himawari')) state.satLon = 140.7;
+            else if (name.includes('fy4')) state.satLon = 104.7;
+            else if (name.includes('msg41')) state.satLon = 41.5;
+            else if (name.includes('msg0')) state.satLon = 0.0;
+            else state.satLon = 0; // Default to Prime Meridian if unknown
+
+            setStatus("Loading local video...", "warning");
+            video.src = url;
+            video.load();
+        }
+    }
+
+    function capturePreview() {
+        const currC = document.getElementById('canvas-current');
+        const ctx = currC.getContext('2d');
+        try {
+            ctx.drawImage(video, 0, 0, currC.width, currC.height);
+            document.getElementById('scan-preview').src = currC.toDataURL();
+        } catch (e) {
+            // Ignore taint error for preview if it happens
+        }
+    }
+
+    // --- PROCESSING CORE ---
+    
+    function startVideoProcessing() {
+        if (!state.isReady) return;
+        if (state.isPlaying) return;
+
+        state.isPlaying = true;
+        state.hasInitializedBounds = false;
+        
+        document.getElementById('btn-start-process').style.display = 'none';
+        document.getElementById('btn-stop-process').style.display = 'block';
+        document.getElementById('vid-progress-container').style.display = 'block';
+
+        const pCtx = document.getElementById('canvas-persist').getContext('2d');
+        pCtx.clearRect(0, 0, pCtx.canvas.width, pCtx.canvas.height);
+
+        video.currentTime = 0;
+        video.play().then(() => {
+            setStatus("Analysis started...", "success");
+            processLoop();
+        }).catch(err => {
+            setStatus("Error: Could not play video.", "error");
+            stopVideoProcessing();
+        });
+    }
+
+    function stopVideoProcessing() {
+        state.isPlaying = false;
+        video.pause();
+        cancelAnimationFrame(state.animationFrameId);
+
+        document.getElementById('btn-start-process').style.display = 'block';
+        document.getElementById('btn-stop-process').style.display = 'none';
+        document.getElementById('vid-progress-container').style.display = 'none';
+        
+        finalizeRaster();
+    }
+
+    function processLoop() {
+        if (!state.isPlaying) return;
+
+        if (video.paused || video.ended) {
+            if(video.ended) stopVideoProcessing();
+            return;
+        }
+
+        const currC = document.getElementById('canvas-current');
+        const prevC = document.getElementById('canvas-previous');
+        const persC = document.getElementById('canvas-persist');
+        
+        const ctxCurr = currC.getContext('2d');
+        const ctxPrev = prevC.getContext('2d');
+        const ctxPers = persC.getContext('2d');
+
+        ctxCurr.drawImage(video, 0, 0, currC.width, currC.height);
+        
+        if (state.hasInitializedBounds) {
+            try {
+                const w = currC.width;
+                const h = currC.height;
+                const dataCurr = ctxCurr.getImageData(0, 0, w, h);
+                const prevData = ctxPrev.getImageData(0,0,w,h);
+                
+                detectAndDraw(dataCurr.data, prevData.data, w, h, ctxPers);
+            } catch (e) {
+                stopVideoProcessing();
+                if (e.name === 'SecurityError') {
+                    setStatus("SECURITY BLOCK (CORS):\nThe server blocks pixel reading from this URL.\n\nSOLUTION: Download the video and use 'Upload Local Video'.", "error");
+                } else {
+                    setStatus("Error during processing: " + e.message, "error");
+                }
+                return;
+            }
+        } else {
+            try {
+                initializeBounds(ctxCurr, currC.width, currC.height);
+            } catch (e) {
+                stopVideoProcessing();
+                setStatus("Error initializing video bounds (CORS or Format issue).", "error");
+                return;
+            }
+        }
+
+        ctxPrev.drawImage(currC, 0, 0);
+
+        const pct = (video.currentTime / video.duration) * 100;
+        document.getElementById('vid-progress-bar').style.width = `${pct}%`;
+        
+        if (Math.random() > 0.95) {
+             document.getElementById('vid-status').innerText = `Analyzing... Pixels found: ${state.strikeCount}`;
+        }
+
+        state.animationFrameId = requestAnimationFrame(processLoop);
+    }
+
+    // --- AUTO BOUNDING BOX DETECTION ---
+    function initializeBounds(ctx, w, h) {
+        const frame = ctx.getImageData(0, 0, w, h);
+        const data = frame.data;
+        
+        let minX = w, maxX = 0, minY = h, maxY = 0;
+        let found = false;
+        const step = 20; 
+
+        for (let y = 0; y < h; y += step) {
+            for (let x = 0; x < w; x += step) {
+                const i = (y * w + x) * 4;
+                if (data[i] + data[i+1] + data[i+2] > 30) {
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                    found = true;
+                }
+            }
+        }
+
+        const pad = 5;
+        state.videoBounds = {
+            x: Math.max(0, minX - pad),
+            y: Math.max(0, minY - pad),
+            w: Math.min(w, maxX + pad) - Math.max(0, minX - pad),
+            h: Math.min(h, maxY + pad) - Math.max(0, minY - pad),
+            fullWidth: w,
+            fullHeight: h
+        };
+        
+        state.hasInitializedBounds = true;
+        if (!found) state.videoBounds = { x: 0, y: 0, w: w, h: h, fullWidth: w, fullHeight: h };
+    }
+
+    // --- PIXEL DIFFERENCE & COLOR LOGIC ---
+    function detectAndDraw(cData, pData, w, h, ctxPers) {
+        const bounds = state.videoBounds;
+        const sensitivity = parseInt(document.getElementById('sensitivity-slider').value);
+        const target = state.targetColor;
+        
+        const startX = Math.floor(bounds.x);
+        const startY = Math.floor(bounds.y);
+        const endX = Math.floor(bounds.x + bounds.w);
+        const endY = Math.floor(bounds.y + bounds.h);
+        const stride = 4; 
+
+        for (let y = startY; y < endY; y += stride) {
+            for (let x = startX; x < endX; x += stride) {
+                const i = (y * w + x) * 4;
+                const r1 = cData[i], g1 = cData[i+1], b1 = cData[i+2];
+                const r2 = pData[i], g2 = pData[i+1], b2 = pData[i+2];
+
+                const diff = Math.abs(r1 - r2) + Math.abs(g1 - g2) + Math.abs(b1 - b2);
+                
+                if (diff > sensitivity) {
+                    let isStrike = false;
+                    if (target === 'blue') {
+                        if (b1 > 150 && g1 > 100 && r1 < 100 && b1 > r1 && b1 > g1) isStrike = true;
+                    } else if (target === 'red') {
+                        if (r1 > 150 && g1 < 120 && b1 < 120 && r1 > g1 && r1 > b1) isStrike = true;
+                    }
+
+                    if (isStrike) {
+                        ctxPers.fillStyle = target === 'blue' ? 'rgba(0, 255, 255, 0.8)' : 'rgba(255, 50, 50, 0.8)';
+                        ctxPers.beginPath();
+                        ctxPers.arc(x, y, 2, 0, Math.PI * 2);
+                        ctxPers.fill();
+                        state.strikeCount++;
+                    }
+                }
+            }
+        }
+    }
+
+    // --- MAPPING / RASTERIZATION ---
+    function finalizeRaster() {
+        const persCanvas = document.getElementById('canvas-persist');
+        const status = document.getElementById('vid-status');
+        
+        try {
+            const dataUrl = persCanvas.toDataURL('image/png');
+            if (!state.videoBounds) return;
+
+            const b = state.videoBounds;
+            
+            // GEO-REFERENCING CALCULATIONS
+            // The Earth as seen from GEO occupies approx 17.4 degrees of the satellite's view field.
+            // This corresponds to a ground span of approx +/- 81.3 degrees from sub-satellite point.
+            const GROUND_SPAN = 162.6; 
+            
+            // Satellite Longitude
+            const centerLon = state.satLon;
+            
+            // Calculate degrees per pixel within the detected Earth disk
+            // We assume the detected bounds (b) represent the visible Earth disk.
+            const degPerPixel = GROUND_SPAN / b.w;
+
+            // Calculate Longitude bounds for the entire Canvas (not just the disk)
+            // West Edge of Canvas:
+            // It is (West Edge of Earth) minus (distance from canvas left edge to earth left edge) * scale
+            const earthWestLon = centerLon - (GROUND_SPAN / 2);
+            const canvasWestLon = earthWestLon - (b.x * degPerPixel);
+            
+            // East Edge of Canvas:
+            const earthEastLon = centerLon + (GROUND_SPAN / 2);
+            const spaceWidth = b.fullWidth - (b.x + b.w);
+            const canvasEastLon = earthEastLon + (spaceWidth * degPerPixel);
+
+            // Calculate Latitude bounds for the entire Canvas
+            // North Edge of Earth is at +81.3 deg
+            // Canvas Y=0 is top. Earth Disk starts at b.y.
+            // North Pole is at y = b.y. 
+            // Canvas North (y=0) is further north by b.y pixels.
+            const earthNorthLat = (GROUND_SPAN / 2); 
+            const canvasNorthLat = earthNorthLat + (b.y * degPerPixel);
+            
+            // South Edge
+            const earthSouthLat = -(GROUND_SPAN / 2);
+            const spaceHeight = b.fullHeight - (b.y + b.h);
+            const canvasSouthLat = earthSouthLat - (spaceHeight * degPerPixel);
+
+            // Safety clamp to prevent Leaflet errors if calculations go slightly out of bounds
+            const clamp = (num, min, max) => Math.min(Math.max(num, min), max);
+
+            const southWest = L.latLng(clamp(canvasSouthLat, -90, 90), clamp(canvasWestLon, -180, 180));
+            const northEast = L.latLng(clamp(canvasNorthLat, -90, 90), clamp(canvasEastLon, -180, 180));
+            const bounds = L.latLngBounds(southWest, northEast);
+
+            if (persistentLayer) map.removeLayer(persistentLayer);
+
+            persistentLayer = L.imageOverlay(dataUrl, bounds, {
+                opacity: 0.8,
+                interactive: false
+            }).addTo(map);
+
+            map.fitBounds(bounds);
+            document.getElementById('sec-results').style.display = 'block';
+            status.innerText = `Complete!\nDetected ${state.strikeCount} pixels.\nLayer georeferenced to Sat Lon ${centerLon}°.`;
+            status.className = "status success";
+        } catch (e) {
+            console.error(e);
+            status.innerText = "Error generating raster.";
+            status.className = "status error";
+        }
+    }
+
+    // --- LAYER CONTROLS ---
+    function togglePersistLayer() {
+        if (!persistentLayer) return;
+        const chk = document.getElementById('chk-persist-layer');
+        if (chk.checked) {
+            if (!map.hasLayer(persistentLayer)) map.addLayer(persistentLayer);
+        } else {
+            map.removeLayer(persistentLayer);
+        }
+    }
+
+    function updateLayerOpacity(val) {
+        if (persistentLayer) persistentLayer.setOpacity(val);
+    }
+
+    function setStatus(msg, type = "") {
+        const el = document.getElementById('vid-status');
+        el.innerText = msg;
+        el.className = "status " + type;
+    }
+
+    function resetAll(hardReset = true) {
+        stopVideoProcessing();
+        if (hardReset) {
+            video.src = "";
+            satSelect.value = "";
+            document.getElementById('fVideo').value = "";
+            document.getElementById('scan-preview').src = "";
+            setStatus("Ready.");
+            state.satLon = 0; // Reset sat lon
+        }
+        
+        if (persistentLayer) {
+            map.removeLayer(persistentLayer);
+            persistentLayer = null;
+        }
+        document.getElementById('sec-results').style.display = 'none';
+        state.strikeCount = 0;
+        state.hasInitializedBounds = false;
+        state.isReady = false;
+        document.getElementById('btn-start-process').disabled = true;
+    }
+
+</script>
+
+</body>
+</html>
